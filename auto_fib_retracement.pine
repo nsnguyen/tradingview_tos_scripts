@@ -1,0 +1,48 @@
+//@version=6
+indicator("Auto Fibonacci Retracement", overlay=true)
+
+// Inputs for pivot strength
+leftBars = input.int(5, "Left Bars for Pivot", minval=1)
+rightBars = input.int(5, "Right Bars for Pivot", minval=1)
+
+// Detect most recent swing high and low
+currentSwingHigh = ta.pivothigh(high, leftBars, rightBars)
+currentSwingLow = ta.pivotlow(low, leftBars, rightBars)
+
+// Store the last valid pivot values
+var float lastSwingHigh = 0.0
+var float lastSwingLow = 0.0
+var bool hasValidPivots = false
+
+if not na(currentSwingHigh)
+    lastSwingHigh := currentSwingHigh
+    hasValidPivots := true
+if not na(currentSwingLow)
+    lastSwingLow := currentSwingLow
+    hasValidPivots := true
+
+// Calculate Fibonacci levels
+fib236 = hasValidPivots and lastSwingHigh > 0 and lastSwingLow > 0 ? lastSwingHigh - (lastSwingHigh - lastSwingLow) * 0.236 : na
+fib382 = hasValidPivots and lastSwingHigh > 0 and lastSwingLow > 0 ? lastSwingHigh - (lastSwingHigh - lastSwingLow) * 0.382 : na
+fib500 = hasValidPivots and lastSwingHigh > 0 and lastSwingLow > 0 ? lastSwingHigh - (lastSwingHigh - lastSwingLow) * 0.5 : na
+fib618 = hasValidPivots and lastSwingHigh > 0 and lastSwingLow > 0 ? lastSwingHigh - (lastSwingHigh - lastSwingLow) * 0.618 : na
+fib786 = hasValidPivots and lastSwingHigh > 0 and lastSwingLow > 0 ? lastSwingHigh - (lastSwingHigh - lastSwingLow) * 0.786 : na
+
+// Plot the Fibonacci levels - these will move with the chart
+plot(lastSwingHigh, "100% Fib", color=color.red, linewidth=2, style=plot.style_line)
+plot(fib786, "78.6% Fib", color=color.orange, linewidth=1, style=plot.style_line)
+plot(fib618, "61.8% Fib", color=color.yellow, linewidth=1, style=plot.style_line)
+plot(fib500, "50% Fib", color=color.green, linewidth=1, style=plot.style_line)
+plot(fib382, "38.2% Fib", color=color.blue, linewidth=1, style=plot.style_line)
+plot(fib236, "23.6% Fib", color=color.purple, linewidth=1, style=plot.style_line)
+plot(lastSwingLow, "0% Fib", color=color.red, linewidth=2, style=plot.style_line)
+
+// Plot to show the detected pivots
+plot(currentSwingHigh, "Swing High", color=color.red, style=plot.style_circles, offset=-rightBars)
+plot(currentSwingLow, "Swing Low", color=color.green, style=plot.style_circles, offset=-rightBars)
+
+// Labels for swing points
+if not na(currentSwingHigh)
+    label.new(bar_index[rightBars], currentSwingHigh, "Swing High", style=label.style_label_down, color=color.red, textcolor=color.white)
+if not na(currentSwingLow)
+    label.new(bar_index[rightBars], currentSwingLow, "Swing Low", style=label.style_label_up, color=color.green, textcolor=color.white)

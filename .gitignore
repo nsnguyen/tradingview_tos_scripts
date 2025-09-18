@@ -1,0 +1,31 @@
+# macOS files
+.DS_Store
+.Apple*
+*.icloud
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.sublime*
+.vscode
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+
+# Environment files
+.env
+.venv
+env/
+venv/
+
+# Ignore compiled files
+*.pyc
+__pycache__/
+
+# Misc
+node_modules/
+dist/
+build/
