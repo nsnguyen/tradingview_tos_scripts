@@ -1,0 +1,134 @@
+# Weekly Expected Move (EM) Levels
+# Author: Aevitas Partners (assistant-generated)
+# Description:
+#   Plots weekly Expected Move High/Low (EMH/EML) around a weekly anchor price.
+#   Anchor can be prior week's Friday close or this week's open (NWOG).
+#   EM can be computed automatically from implied volatility or set manually.
+#   Lines stay constant across the week if lockEMAtWeekOpen is enabled.
+#
+# Notes:
+#   - Week Open uses open(period = AggregationPeriod.WEEK), which aligns with
+#     Monday RTH open for equities. For futures, this may reflect Sunday Globex
+#     open depending on the symbol/session. A toggle is provided to prefer
+#     Week Open vs Previous Week Close.
+#   - Auto EM formula: EM = lastPrice * IV * Sqrt(DTE/365) * sigmaMultiplier.
+#     IV comes from ImpVolatility(). If IV is NaN, falls back to defaultIVInput.
+#   - DTE uses calendar days to the coming Friday 16:00 ET approximation.
+#
+# Usage:
+#   - Add the study on any timeframe; levels reflect the current week.
+#   - If you prefer a fixed weekly EM, keep lockEMAtWeekOpen = yes. If you
+#     prefer EM to decay with time, set lockEMAtWeekOpen = no.
+#
+# DISCLAIMER: For analysis/education only. No warranty. Not investment advice.
+
+declare upper;
+
+# ------------------------------
+# Inputs
+# ------------------------------
+input anchorMethod = { default WeekOpen_NWOG, PrevWeekClose, Manual };
+input manualAnchor = 0.0;
+input useAutoEM = yes;
+input sigmaMultiplier = 1.0;        # 1.0 = ~1-sigma
+input useCalendarDays = yes;        # DTE basis (kept for future extensibility)
+input defaultIVInput = 0.20;        # Fallback IV if ImpVolatility() is NaN
+input manualEM = 10.0;              # Used if useAutoEM = no
+input lockEMAtWeekOpen = yes;       # Freeze EM at start of week
+input showCloud = yes;
+input showLabels = yes;
+input showRightBubbles = yes;       # Label the lines at the last bar
+
+# Colors (use global colors for TOS compatibility)
+DefineGlobalColor("Anchor", Color.GRAY);
+DefineGlobalColor("EMH", Color.GREEN);
+DefineGlobalColor("EML", Color.RED);
+
+# ------------------------------
+# Helper: current week open and previous week close
+# ------------------------------
+def weekOpen = open(period = AggregationPeriod.WEEK);
+def prevWeekClose = close(period = AggregationPeriod.WEEK)[1];
+
+# Detect new week by change in weekOpen
+def isNewWeek = weekOpen != weekOpen[1];
+
+# ------------------------------
+# Anchor selection
+# ------------------------------
+
+def selectedAnchor =
+    if anchorMethod == anchorMethod.WeekOpen_NWOG then weekOpen
+    else if anchorMethod == anchorMethod.PrevWeekClose then prevWeekClose
+    else manualAnchor;
+
+plot Anchor = selectedAnchor;
+Anchor.SetDefaultColor(GetColor(0));
+Anchor.SetLineWeight(2);
+Anchor.SetStyle(Curve.SHORT_DASH);
+
+# ------------------------------
+# DTE to coming Friday close (calendar-days approximation)
+# ------------------------------
+def dow = GetDayOfWeek(GetYYYYMMDD());     # 1=Sun, 2=Mon, ... 6=Fri, 7=Sat
+
+def daysToFriday = if dow <= 6 then 6 - dow else 6;  # Sat -> 6 days
+
+def fracToday = if dow <= 6 then Max(0, SecondsTillTime(1600)) / 86400 else 0;
+
+def dteCalendar = daysToFriday + fracToday;  # days from now until Friday 16:00
+
+# ------------------------------
+# IV and Expected Move
+# ------------------------------
+# Pull underlying IV; fallback to defaultIVInput if NaN or non-positive
+# Note: Function is ImpVolatility() in thinkScript (case-insensitive)
+def rawIV = ImpVolatility();
+def iv = if !IsNaN(rawIV) and rawIV > 0 then rawIV else defaultIVInput;
+
+# Price basis for EM formula (use current close so scale is realistic)
+def basisPrice = close;
+
+# EM computed from IV and DTE
+
+def emAuto = basisPrice * iv * Sqrt(dteCalendar / 365) * sigmaMultiplier;
+# Option to lock EM at week open
+rec emAutoLocked = if isNewWeek or IsNaN(emAutoLocked[1]) then emAuto else emAutoLocked[1];
+
+# Final EM value
+
+def EM = if useAutoEM then (if lockEMAtWeekOpen then emAutoLocked else emAuto) else manualEM;
+
+# ------------------------------
+# Plots: EM High/Low
+# ------------------------------
+plot EMH = Anchor + EM;
+EMH.SetDefaultColor(GetColor(1));
+EMH.SetLineWeight(2);
+
+plot EML = Anchor - EM;
+EML.SetDefaultColor(GetColor(2));
+EML.SetLineWeight(2);
+
+# Optional cloud between EMH and EML
+AddCloud(if showCloud then EMH else Double.NaN,
+         if showCloud then EML else Double.NaN,
+         GetColor(1), GetColor(2));
+
+# ------------------------------
+# Right-edge bubbles on the last bar (robust)
+# ------------------------------
+def bn = BarNumber();
+def isTrueLastBar = (bn == HighestAll(bn)) or IsNaN(close[-1]);
+AddChartBubble(showRightBubbles and isTrueLastBar, EMH, "EMH " + AsDollars(EMH), GetColor(1), yes);
+AddChartBubble(showRightBubbles and isTrueLastBar, EML, "EML " + AsDollars(EML), GetColor(2), no);
+# AddChartBubble(showRightBubbles and isTrueLastBar, Anchor, "Anchor " + AsDollars(Anchor), GetColor(0), yes);
+
+# ------------------------------
+# Labels (top-left panel)
+# ------------------------------
+AddLabel(showLabels, "Anchor: " + AsDollars(Anchor), GetColor(0));
+AddLabel(showLabels, "EM: " + AsDollars(EM) + "  (IV: " + AsPercent(iv) + ")", Color.WHITE);
+AddLabel(showLabels, "EMH: " + AsDollars(EMH) + "  EML: " + AsDollars(EML), Color.WHITE);
+
+# End of file
