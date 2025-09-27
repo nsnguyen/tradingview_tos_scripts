@@ -1,0 +1,92 @@
+//@version=6
+indicator("Intraday Auto Fibonacci Retracement", overlay=true)
+
+// Intraday-optimized inputs
+depth = input.int(5, "Depth", minval=2, tooltip="Minimum bars for swing detection")
+deviation = input.float(1.5, "Deviation", minval=0.1, step=0.1, tooltip="ATR multiplier for swing sensitivity")
+volumeMultiplier = input.float(1.1, "Volume Multiplier", minval=1.0, maxval=3.0, step=0.1, tooltip="Minimum volume ratio for swing confirmation")
+lookbackBars = input.int(50, "Lookback Bars", minval=10, tooltip="How many bars back to look for recent swings")
+
+// Import ZigZag library
+import TradingView/ZigZag/7 as zigzag
+
+// Create ZigZag instance with intraday settings
+var settings = zigzag.Settings.new(deviation, depth, color(na), false, false, false, false, "Absolute", true)
+var zigzag.ZigZag zigZag = zigzag.newInstance(settings)
+
+// Volume confirmation
+avgVolume = ta.sma(volume, 10)
+volumeRatio = volume / avgVolume
+isHighVolume = volumeRatio >= volumeMultiplier
+
+// Update ZigZag with ATR-based deviation
+settings.devThreshold := ta.atr(10) / close * 100 * deviation
+
+// Find most recent significant swings using simple pivot detection
+recentSwingHigh = ta.pivothigh(high, depth, depth)
+recentSwingLow = ta.pivotlow(low, depth, depth)
+
+// Store the most recent valid swings
+var float persistentSwingHigh = 0.0
+var float persistentSwingLow = 0.0
+var bool hasValidSwings = false
+var int lastSwingHighBar = 0
+var int lastSwingLowBar = 0
+
+// Update swing high when new one is detected
+if not na(recentSwingHigh)
+    persistentSwingHigh := recentSwingHigh
+    lastSwingHighBar := bar_index - depth
+    hasValidSwings := true
+
+// Update swing low when new one is detected  
+if not na(recentSwingLow)
+    persistentSwingLow := recentSwingLow
+    lastSwingLowBar := bar_index - depth
+    hasValidSwings := true
+
+// If no recent swings detected, find the most recent significant swings in lookback period
+if not hasValidSwings or (persistentSwingHigh == 0 and persistentSwingLow == 0)
+    // Find highest high and lowest low in lookback period
+    recentHigh = ta.highest(high, lookbackBars)
+    recentLow = ta.lowest(low, lookbackBars)
+    
+    // Only use if we have a meaningful range
+    if recentHigh > recentLow and (recentHigh - recentLow) > ta.atr(10) * 0.5
+        persistentSwingHigh := recentHigh
+        persistentSwingLow := recentLow
+        lastSwingHighBar := bar_index - lookbackBars
+        lastSwingLowBar := bar_index - lookbackBars
+        hasValidSwings := true
+
+// Ensure we have both high and low for valid Fibonacci
+if persistentSwingHigh > 0 and persistentSwingLow > 0
+    hasValidSwings := true
+
+// Calculate Fibonacci levels
+fib100 = persistentSwingHigh
+fib786 = hasValidSwings and persistentSwingHigh > 0 and persistentSwingLow > 0 ? persistentSwingHigh - (persistentSwingHigh - persistentSwingLow) * 0.214 : na
+fib618 = hasValidSwings and persistentSwingHigh > 0 and persistentSwingLow > 0 ? persistentSwingHigh - (persistentSwingHigh - persistentSwingLow) * 0.382 : na
+fib500 = hasValidSwings and persistentSwingHigh > 0 and persistentSwingLow > 0 ? persistentSwingHigh - (persistentSwingHigh - persistentSwingLow) * 0.5 : na
+fib382 = hasValidSwings and persistentSwingHigh > 0 and persistentSwingLow > 0 ? persistentSwingHigh - (persistentSwingHigh - persistentSwingLow) * 0.382 : na
+fib236 = hasValidSwings and persistentSwingHigh > 0 and persistentSwingLow > 0 ? persistentSwingHigh - (persistentSwingHigh - persistentSwingLow) * 0.236 : na
+fib0 = persistentSwingLow
+
+// Plot the Fibonacci levels
+plot(fib100, "100% Fib", color=color.red, linewidth=2, style=plot.style_line)
+plot(fib786, "78.6% Fib", color=color.orange, linewidth=1, style=plot.style_line)
+plot(fib618, "61.8% Fib", color=color.yellow, linewidth=1, style=plot.style_line)
+plot(fib500, "50% Fib", color=color.green, linewidth=1, style=plot.style_line)
+plot(fib382, "38.2% Fib", color=color.blue, linewidth=1, style=plot.style_line)
+plot(fib236, "23.6% Fib", color=color.purple, linewidth=1, style=plot.style_line)
+plot(fib0, "0% Fib", color=color.red, linewidth=2, style=plot.style_line)
+
+// Plot swing points
+plot(persistentSwingHigh, "Swing High", color=color.red, style=plot.style_circles, display=display.none)
+plot(persistentSwingLow, "Swing Low", color=color.green, style=plot.style_circles, display=display.none)
+
+// Labels for swing points
+if hasValidSwings and persistentSwingHigh > 0
+    label.new(lastSwingHighBar, persistentSwingHigh, "Swing High\n100%", style=label.style_label_down, color=color.red, textcolor=color.white, size=size.small)
+if hasValidSwings and persistentSwingLow > 0
+    label.new(lastSwingLowBar, persistentSwingLow, "Swing Low\n0%", style=label.style_label_up, color=color.green, textcolor=color.white, size=size.small)

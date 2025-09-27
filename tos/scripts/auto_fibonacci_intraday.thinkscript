@@ -1,0 +1,161 @@
+# Intraday Auto Fibonacci Levels (Thinkorswim)
+# Author: Aevitas Partners (assistant-generated)
+# Description:
+#   Plots intraday Fibonacci retracement and optional extension levels anchored to
+#   a chosen range: Current Session, Previous Session, Rolling Lookback, or Manual.
+#   Supports RTH-only tracking (e.g., 09:30-16:00 ET) and right-edge bubbles.
+#
+# Notes:
+#   - Current Session (RTH): Updates live during the regular trading session window.
+#   - Previous Session (RTH): Uses the finalized range from the prior RTH window.
+#   - If RTH mode is disabled, the session range resets at the start of each day
+#     and includes all intraday bars (including pre/post).
+#   - Rolling Lookback is independent of session tracking and uses a simple Highest/Lowest.
+#   - For futures/24h symbols, adjust the RTH window or disable RTH.
+#
+# DISCLAIMER: For analysis/education only. No warranty. Not investment advice.
+
+declare upper;
+
+# ------------------------------
+# Inputs
+# ------------------------------
+input anchorSource = { default CurrentSession, PreviousSession, RollingLookback, Manual };
+input useRTH = yes;                 # Track session high/low only during RTH window
+input rthStartTime = 0930;          # RTH start (HHmm, exchange time)
+input rthEndTime = 1600;            # RTH end (HHmm, exchange time)
+input lookbackBars = 100;           # For RollingLookback
+input showExtensions = yes;         # Plot 127.2% / 161.8% / -27.2% / -61.8%
+input showLabels = yes;             # Header labels with range info
+input manualHigh = 0.0;             # Manual anchor high (if Manual selected)
+input manualLow = 0.0;              # Manual anchor low (if Manual selected)
+
+# Colors
+DefineGlobalColor("Fib100", Color.RED);
+DefineGlobalColor("Fib0786", Color.ORANGE);
+DefineGlobalColor("Fib0618", Color.YELLOW);
+DefineGlobalColor("Fib0500", Color.GREEN);
+DefineGlobalColor("Fib0382", Color.CYAN);
+DefineGlobalColor("Fib0236", Color.MAGENTA);
+DefineGlobalColor("Fib000", Color.RED);
+DefineGlobalColor("ExtUp", Color.DARK_GREEN);
+DefineGlobalColor("ExtDown", Color.DARK_RED);
+DefineGlobalColor("Anchor", Color.GRAY);
+
+# ------------------------------
+# Session detection
+# ------------------------------
+def isNewDay = GetYYYYMMDD() != GetYYYYMMDD()[1];
+def isIntraday = GetAggregationPeriod() < AggregationPeriod.DAY;
+def isRTH = SecondsFromTime(rthStartTime) >= 0 and SecondsTillTime(rthEndTime) > 0;
+def rthSessionStart = isRTH and !isRTH[1];
+def allDaySessionStart = isNewDay;
+
+# Track current session high/low (intraday uses RTH logic; daily/higher uses bar high/low)
+# Use CompoundValue to avoid zero-initialization that can pin lows to 0
+rec sessionHigh = CompoundValue(1,
+                  if isIntraday then (
+                     if (useRTH and rthSessionStart) or (!useRTH and allDaySessionStart) then high
+                     else if (useRTH and isRTH) or (!useRTH) then Max(sessionHigh[1], high)
+                     else sessionHigh[1]
+                  ) else high,
+                  high);
+rec sessionLow  = CompoundValue(1,
+                  if isIntraday then (
+                     if (useRTH and rthSessionStart) or (!useRTH and allDaySessionStart) then low
+                     else if (useRTH and isRTH) or (!useRTH) then (if sessionLow[1] == 0 then low else Min(sessionLow[1], low))
+                     else sessionLow[1]
+                  ) else low,
+                  low);
+
+# Capture previous session finalized high/low
+# - Intraday: snapshot prior session values at session open
+# - Daily or higher: simply use prior bar high/low
+def sessionOpenEvent = if useRTH then rthSessionStart else allDaySessionStart;
+rec prevSessionHigh = CompoundValue(1,
+                      if isIntraday then (
+                         if sessionOpenEvent and sessionHigh[1] > 0 then sessionHigh[1] else prevSessionHigh[1]
+                      ) else high[1],
+                      Double.NaN);
+rec prevSessionLow  = CompoundValue(1,
+                      if isIntraday then (
+                         if sessionOpenEvent and sessionLow[1] > 0 then sessionLow[1] else prevSessionLow[1]
+                      ) else low[1],
+                      Double.NaN);
+
+# ------------------------------
+# Rolling lookback anchors
+# ------------------------------
+def lbHigh = Highest(high, lookbackBars);
+def lbLow  = Lowest(low, lookbackBars);
+
+# ------------------------------
+# Anchor selection
+# ------------------------------
+def selectedHigh =
+    if anchorSource == anchorSource.CurrentSession then sessionHigh
+    else if anchorSource == anchorSource.PreviousSession then prevSessionHigh
+    else if anchorSource == anchorSource.RollingLookback then lbHigh
+    else manualHigh;
+
+def selectedLow =
+    if anchorSource == anchorSource.CurrentSession then sessionLow
+    else if anchorSource == anchorSource.PreviousSession then prevSessionLow
+    else if anchorSource == anchorSource.RollingLookback then lbLow
+    else manualLow;
+
+def haveRange = !IsNaN(selectedHigh) and !IsNaN(selectedLow) and selectedHigh > selectedLow and selectedLow > 0;
+def range = if haveRange then selectedHigh - selectedLow else Double.NaN;
+
+# ------------------------------
+# Fibonacci Levels (0..100) and Extensions
+# ------------------------------
+plot Fib100 = if haveRange then selectedHigh else Double.NaN;
+Fib100.SetDefaultColor(GlobalColor("Fib100"));
+Fib100.SetLineWeight(2);
+
+plot Fib0786 = if haveRange then selectedHigh - range * 0.786 else Double.NaN;
+Fib0786.SetDefaultColor(GlobalColor("Fib0786"));
+
+plot Fib0618 = if haveRange then selectedHigh - range * 0.618 else Double.NaN;
+Fib0618.SetDefaultColor(GlobalColor("Fib0618"));
+
+plot Fib0500 = if haveRange then selectedHigh - range * 0.500 else Double.NaN;
+Fib0500.SetDefaultColor(GlobalColor("Fib0500"));
+
+plot Fib0382 = if haveRange then selectedHigh - range * 0.382 else Double.NaN;
+Fib0382.SetDefaultColor(GlobalColor("Fib0382"));
+
+plot Fib0236 = if haveRange then selectedHigh - range * 0.236 else Double.NaN;
+Fib0236.SetDefaultColor(GlobalColor("Fib0236"));
+
+plot Fib000 = if haveRange then selectedLow else Double.NaN;
+Fib000.SetDefaultColor(GlobalColor("Fib000"));
+Fib000.SetLineWeight(2);
+
+# Extensions (beyond 0 and 100)
+plot Ext1618 = if haveRange and showExtensions then selectedHigh + range * 0.618 else Double.NaN;
+Ext1618.SetDefaultColor(GlobalColor("ExtUp"));
+Ext1618.SetStyle(Curve.SHORT_DASH);
+
+plot Ext1272 = if haveRange and showExtensions then selectedHigh + range * 0.272 else Double.NaN;
+Ext1272.SetDefaultColor(GlobalColor("ExtUp"));
+Ext1272.SetStyle(Curve.SHORT_DASH);
+
+plot Extm0272 = if haveRange and showExtensions then selectedLow - range * 0.272 else Double.NaN;
+Extm0272.SetDefaultColor(GlobalColor("ExtDown"));
+Extm0272.SetStyle(Curve.SHORT_DASH);
+
+plot Extm0618 = if haveRange and showExtensions then selectedLow - range * 0.618 else Double.NaN;
+Extm0618.SetDefaultColor(GlobalColor("ExtDown"));
+Extm0618.SetStyle(Curve.SHORT_DASH);
+
+# ------------------------------
+# Labels
+# ------------------------------
+AddLabel(showLabels and haveRange, "Anchor High: " + AsDollars(selectedHigh) + "  Low: " + AsDollars(selectedLow), GlobalColor("Anchor"));
+AddLabel(showLabels and haveRange, "Range: " + AsDollars(range), Color.WHITE);
+
+# End of file
+
+
