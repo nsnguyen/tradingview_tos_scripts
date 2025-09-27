@@ -1,0 +1,16 @@
+declare lower;
+input usePrevClose = yes;  // no -> compare Close vs Open
+def up = if usePrevClose then close > close[1] else close > open;
+def down = if usePrevClose then close < (usePrevClose ? close[1] : open) else close < open;
+
+// Fallback for symbols without true volume (e.g., SPX, FX)
+def hasVol = !IsNaN(volume) and volume > 0;
+plot Vol = if hasVol then volume else ticks;
+
+Vol.SetPaintingStrategy(PaintingStrategy.HISTOGRAM);
+Vol.SetLineWeight(3);
+Vol.AssignValueColor(
+    if up then Color.GREEN
+    else if down then Color.RED
+    else Color.GRAY
+);
