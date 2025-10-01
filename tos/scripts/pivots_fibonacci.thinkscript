@@ -1,0 +1,142 @@
+# Fibonacci Pivot Points (Thinkorswim)
+# Author: Aevitas Partners (assistant-generated)
+# Description:
+#   Plots Fibonacci Pivot Points (P, R1-3, S1-3) based on the prior
+#   completed anchor period's OHLC. Anchor period is selectable or
+#   automatically inferred from the chart timeframe.
+#
+#   Auto mapping:
+#     - Intraday <= 15m  -> Daily pivots
+#     - Intraday > 15m   -> Weekly pivots
+#     - Daily            -> Monthly pivots
+#     - Above Daily      -> Yearly pivots
+#
+# Notes:
+#   - Values come from the previous completed anchor period using
+#     high(period=..)[1], low(period=..)[1], close(period=..)[1].
+#   - Lines stay constant during the current anchor period and
+#     update at the next boundary.
+#   - For Extended Hours differences vs Daily-based OHLC, Thinkorswim
+#     uses official OHLC for higher aggregations.
+#
+# DISCLAIMER: For analysis/education only. No warranty. Not investment advice.
+
+declare upper;
+
+# ------------------------------
+# Inputs
+# ------------------------------
+input pivotAnchor = { default Auto, Daily, Weekly, Monthly, Yearly };
+input showLabels = yes;              # Top-left label with anchor and P
+input showRightBubbles = yes;        # Price bubbles at right edge
+input lineWidth = 1;                 # Line thickness
+
+# Show/hide individual levels
+input showP = yes;
+input showR1 = yes;
+input showR2 = yes;
+input showR3 = yes;
+input showS1 = yes;
+input showS2 = yes;
+input showS3 = yes;
+
+# Colors: Use plot color settings in the UI (no color inputs)
+
+# ------------------------------
+# Anchor aggregation selection (dynamic)
+# ------------------------------
+def ap = GetAggregationPeriod();
+def isIntraday = ap < AggregationPeriod.DAY;
+
+def autoAgg =
+    if isIntraday then (
+        if ap <= AggregationPeriod.FIFTEEN_MIN then AggregationPeriod.DAY else AggregationPeriod.WEEK
+    ) else if ap == AggregationPeriod.DAY then AggregationPeriod.MONTH
+    else AggregationPeriod.YEAR;
+
+def anchorAgg =
+    if pivotAnchor == pivotAnchor.Auto then autoAgg
+    else if pivotAnchor == pivotAnchor.Daily then AggregationPeriod.DAY
+    else if pivotAnchor == pivotAnchor.Weekly then AggregationPeriod.WEEK
+    else if pivotAnchor == pivotAnchor.Monthly then AggregationPeriod.MONTH
+    else AggregationPeriod.YEAR;
+
+# ------------------------------
+# Prior period OHLC from selected anchor
+# ------------------------------
+def H = high(period = anchorAgg)[1];
+def L = low(period = anchorAgg)[1];
+def C = close(period = anchorAgg)[1];
+def haveData = !IsNaN(H) and !IsNaN(L) and !IsNaN(C) and H >= L;
+
+def P = if haveData then (H + L + C) / 3 else Double.NaN;
+def range = if haveData then H - L else Double.NaN;
+
+# ------------------------------
+# Fibonacci pivot levels
+# ------------------------------
+def R1v = if haveData then P + range * 0.382 else Double.NaN;
+def R2v = if haveData then P + range * 0.618 else Double.NaN;
+def R3v = if haveData then P + range * 1.000 else Double.NaN;
+def S1v = if haveData then P - range * 0.382 else Double.NaN;
+def S2v = if haveData then P - range * 0.618 else Double.NaN;
+def S3v = if haveData then P - range * 1.000 else Double.NaN;
+
+plot PLine = if showP then P else Double.NaN;
+PLine.SetDefaultColor(Color.ORANGE);
+PLine.SetLineWeight(lineWidth);
+
+plot R1 = if showR1 then R1v else Double.NaN;
+R1.SetDefaultColor(Color.ORANGE);
+R1.SetLineWeight(lineWidth);
+
+plot R2 = if showR2 then R2v else Double.NaN;
+R2.SetDefaultColor(Color.ORANGE);
+R2.SetLineWeight(lineWidth);
+
+plot R3 = if showR3 then R3v else Double.NaN;
+R3.SetDefaultColor(Color.ORANGE);
+R3.SetLineWeight(lineWidth);
+
+plot S1 = if showS1 then S1v else Double.NaN;
+S1.SetDefaultColor(Color.ORANGE);
+S1.SetLineWeight(lineWidth);
+
+plot S2 = if showS2 then S2v else Double.NaN;
+S2.SetDefaultColor(Color.ORANGE);
+S2.SetLineWeight(lineWidth);
+
+plot S3 = if showS3 then S3v else Double.NaN;
+S3.SetDefaultColor(Color.ORANGE);
+S3.SetLineWeight(lineWidth);
+
+# ------------------------------
+# Labels and bubbles
+# ------------------------------
+def anchorNameCode =
+    if anchorAgg == AggregationPeriod.DAY then 1
+    else if anchorAgg == AggregationPeriod.WEEK then 2
+    else if anchorAgg == AggregationPeriod.MONTH then 3
+    else 4;  # YEAR
+
+AddLabel(showLabels and haveData,
+         "Pivots (Fib) - " + (
+            if anchorNameCode == 1 then "Daily"
+            else if anchorNameCode == 2 then "Weekly"
+            else if anchorNameCode == 3 then "Monthly" else "Yearly"
+         ) + " | P " + AsPrice(P), Color.WHITE);
+
+def bn = BarNumber();
+def isLast = (bn == HighestAll(bn)) or IsNaN(close[-1]);
+
+AddChartBubble(showRightBubbles and isLast and showP and haveData, P, "P " + AsPrice(P), Color.ORANGE, yes);
+AddChartBubble(showRightBubbles and isLast and showR1 and haveData, R1v, "R1 " + AsPrice(R1v), Color.ORANGE, yes);
+AddChartBubble(showRightBubbles and isLast and showR2 and haveData, R2v, "R2 " + AsPrice(R2v), Color.ORANGE, yes);
+AddChartBubble(showRightBubbles and isLast and showR3 and haveData, R3v, "R3 " + AsPrice(R3v), Color.ORANGE, yes);
+AddChartBubble(showRightBubbles and isLast and showS1 and haveData, S1v, "S1 " + AsPrice(S1v), Color.ORANGE, no);
+AddChartBubble(showRightBubbles and isLast and showS2 and haveData, S2v, "S2 " + AsPrice(S2v), Color.ORANGE, no);
+AddChartBubble(showRightBubbles and isLast and showS3 and haveData, S3v, "S3 " + AsPrice(S3v), Color.ORANGE, no);
+
+# End of file
+
+
