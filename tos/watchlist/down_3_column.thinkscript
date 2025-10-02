@@ -1,14 +1,95 @@
+# ============================================================
+# README — down_3_column.thinkscript
+# ============================================================
+# Purpose
+#   Watchlist custom column that flags (Data = 1) when the most recent
+#   N bars are ALL down (close < open) on the column’s selected timeframe
+#   (e.g., 5‑minute or 15‑minute). Designed for intraday streak scouting
+#   and compatible with OnDemand via watchlists.
+#
+# Where it runs
+#   • Add to a Watchlist column (Custom 1/Custom 2/etc.)
+#   • It does NOT set its own timeframe; it uses the column’s Time frame.
+#     Set that by right‑clicking the column header → Time frame → 5 min or 15 min.
+#     Toggle “Include Extended Hours” there if you want pre/post‑market bars.
+#
+# Quick start
+#   1) Create/open a watchlist (e.g., SPY, QQQ, IWM, UNH, TSLA, NVDA, AAPL, MSFT…)
+#   2) Add a Custom column → Edit formula → paste this entire file’s code
+#   3) Set the column Time frame to 5 min (or 15 min)
+#   4) (Optional) Turn OnDemand ON to step through history; sort by this column
+#   5) A value of 1 = last N bars were red (and any filters passed)
+#
+# Inputs (tune these in the column’s gear → Edit formula)
+#   consecutiveBars   : How many consecutive down candles (default 3)
+#   minPrice          : Ignore symbols below this last price
+#   volLookbackBars   : Length of the intraday liquidity window (default 10 bars)
+#   minAvgVol         : Minimum average SHARES per bar over volLookbackBars
+#   useDollarVolume   : If “yes”, use dollar volume for liquidity checks
+#   minDollarVol      : Minimum average $ per bar over volLookbackBars (if enabled)
+#   useBodyFilter     : If “yes”, each bar’s body must exceed minBodyBP bps of price
+#   minBodyBP         : Body size threshold in basis points (0.01%)
+#   requireMinDrop    : If “yes”, the total % drop from N bars ago must ≤ minDropPct
+#   minDropPct        : The minimum total % drop across the streak (e.g., -3.0)
+#
+# How it works
+#   • Computes price/volume guards (price ≥ minPrice AND average volume/dollar‑volume
+#     over volLookbackBars ≥ threshold).
+#   • Bars are “down” when close < open, and (optionally) body ≥ minBodyBP bps.
+#   • If the last ‘consecutiveBars’ are all down, Data = 1 (subject to filters).
+#   • Evaluates on the last COMPLETED bar of the chosen timeframe.
+#
+# Testing tips
+#   • OnDemand does not support Stock Hacker scans, but watchlist columns DO work.
+#     Turn OnDemand ON, pick a past date/time, and sort by this column.
+#   • If you see few/no 1’s, relax filters temporarily:
+#       useBodyFilter = no, minAvgVol = 0 (or useDollarVolume = no), consecutiveBars = 2
+#     Then tighten as desired.
+#
+# Common adjustments
+#   • 5‑minute: volLookbackBars = 8–12, minAvgVol = 50k–200k per bar
+#   • 15‑minute: volLookbackBars = 6–8, minAvgVol ≈ 150k–600k per bar
+#   • To avoid pre/post‑market noise, disable “Include Extended Hours” on the column.
+#
+# Troubleshooting
+#   • Column shows 0’s only:
+#       – You may be mid‑bar; the signal fires only after the bar closes
+#       – Liquidity/body filters too strict → relax them
+#       – Not enough history yet (early session) → liquidity gate auto‑passes via IsNaN
+#   • Symbol appears in watchlist but scan didn’t catch it yet:
+#       – Scans and columns both fire on bar close; re‑scan after the next bar closes
+#   • Timeframe confusion:
+#       – Right‑click the column header → Time frame → set 5m/15m explicitly
+#
+# Notes
+#   • This column is aggregation‑agnostic—works on 1m/5m/15m/D. Intraday is the target.
+#   • For a companion “streak count” column, you can add:
+#       def down = close < open;
+#       def streak = if down then (if IsNaN(streak[1]) then 1 else streak[1] + 1) else 0;
+#       plot Data = streak;
+#
+# Changelog
+#   2025‑10‑01: Initial README header added; intraday liquidity window (volLookbackBars)
+#               added to avoid long 50‑bar averaging during the session.
+# ============================================================
 # Watchlist flag: N consecutive down bars (1 = match)
 input consecutiveBars = 3;
 input minPrice = 1.0;
-input minAvgVol50 = 0;
+input volLookbackBars = 10;        # use a shorter intraday window (e.g., 10 bars)
+input minAvgVol = 100000;          # per-bar shares on this timeframe
+input useDollarVolume = no;        # toggle to use $ volume instead of shares
+input minDollarVol = 2000000;      # per-bar $ volume if using dollar volume
 input useBodyFilter = no;
 input minBodyBP = 10;
 input requireMinDrop = no;
 input minDropPct = -3.0;
 
 def hasHist  = !IsNaN(close[consecutiveBars]);
-def liquid   = Average(volume, 50) >= minAvgVol50;
+def baseVol = if useDollarVolume then volume * close else volume;
+
+def vAvg    = Average(baseVol, volLookbackBars);
+
+def liquid  = if IsNaN(vAvg) then yes else vAvg >= (if useDollarVolume then minDollarVol else minAvgVol);
 def priceOk  = close >= minPrice and liquid and hasHist;
 
 def body     = AbsValue(close - open);

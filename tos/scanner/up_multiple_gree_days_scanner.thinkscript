@@ -1,3 +1,64 @@
+# ============================================================
+# README — UP‑streak / Top‑Reversal Scanner (Green bars)
+# ============================================================
+# What this does
+#   • When topOn = no: flags symbols where the LAST N bars are ALL GREEN
+#     (up‑streak). N is `consecutiveBars`.
+#   • When topOn = yes: detects a local TOP (first red after ≥ N green bars)
+#     and then requires X red bars of confirmation. X is `topConfirmBars` and
+#     you can choose to count the top bar via `includeTopInCount`.
+#
+# Timeframe & session
+#   • This study respects the Stock Hacker Aggregation (5‑min, 15‑min, Day, etc.).
+#   • Intraday signal uses Close > Open (set usePrevClose = no).
+#   • Daily‑style signal uses Close > Close[1] (set usePrevClose = yes).
+#   • Include/exclude extended hours from the Study filter’s gear menu.
+#
+# Quick mapping to common “UP” triggers
+#   • FirstGreen  → set consecutiveBars = 1
+#   • TwoUp       → set consecutiveBars = 2
+#   • ThreeUp     → set consecutiveBars = 3
+#   (These are contiguous GREEN bars ending on the most recent completed bar.)
+#
+# Visual reference (R = red/down, G = green/up)
+# ... R R R R R R  G  G  G ...
+#                ^  ^  ^
+#                |  |  └─ triggers when set to ThreeUp
+#                |  └──── triggers when set to TwoUp
+#                └─────── triggers when set to FirstGreen
+#
+# Notes on “bottom counts or not?”
+#   • The diagrams below are for intuition. This script’s up‑streak mode
+#     (topOn = no) does not explicitly identify a “bottom” — it simply
+#     requires the last N bars to be GREEN. To emulate “count the bottom”,
+#     reduce N by 1 relative to your mental model.
+#
+# A) Bottom does NOT count (conceptual)
+# You need 3 greens AFTER the bottom → triggers on the 3rd green after.
+# ... R R R  G  G  G  G ...
+#            ^  ^  ^  ^
+#            |  |  |  └─ fires when N=3
+#            |  |  └─── 2 after
+#            |  └────── 1 after
+#            └───────── bottom (not counted)
+#
+# B) Bottom DOES count (conceptual)
+# Bottom counts as #1 → you need 2 more greens → triggers on the 2nd green after.
+# ... R R R  G  G  G ...
+#            ^  ^  ^
+#            |  |  └─ fires when N≈2 (bottom considered #1 conceptually)
+#            |  └─── +1 after
+#            └────── bottom (counts as #1)
+#
+# Inputs you’ll likely tweak
+#   • consecutiveBars   : N in the up‑streak mode (FirstGreen/TwoUp/ThreeUp = 1/2/3)
+#   • minPrice, minAvgVol50 / body filters : basic quality gates
+#   • topOn, topConfirmBars, includeTopInCount : only used for top‑reversal mode
+#   • usePrevClose      : choose Close>Open (intraday) vs Close>Close[1] (daily‑style)
+#
+# Evaluation timing
+#   • Fires on the most recent COMPLETED bar of the selected aggregation.
+# ============================================================
 # StreakUp (many greens) OR TopReversal (top + X down bars) — Daily or Intraday
 # Aggregation:
 #   - Daily:    set to Day, usePrevClose = yes  (green = Close > Close[1])

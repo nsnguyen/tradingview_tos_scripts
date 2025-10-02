@@ -1,3 +1,9 @@
+
+# ============================================================
+# README 
+# ============================================================
+
+
 # Consecutive Down Candles Scanner — uses Scanner's aggregation (no secondary period)
 # Set the Stock Hacker "Aggregation" to 5 min or 15 min. This script will respect that.
 

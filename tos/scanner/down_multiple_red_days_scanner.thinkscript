@@ -1,3 +1,117 @@
+# ============================================================
+# README
+# ============================================================
+# Note: This file scans for consecutive DOWN candles. The diagram below
+# documents an UP‑streak variant’s triggering behavior for reference.
+# (R = red/down bar, G = green/up bar)
+#
+# ... R R R R R R  G  G  G ...
+#                ^  ^  ^
+#                |  |  └─ triggers when set to ThreeUp
+#                |  └──── triggers when set to TwoUp
+#                └─────── triggers when set to FirstGreen
+#
+# A) includeBottomInCount = no (bottom doesn’t count)
+# You need 3 greens after the bottom → triggers on the 3rd green after.
+# ... R R R  G  G  G  G ...
+#            ^  ^  ^  ^
+#            |  |  |  └─ scanner fires here (3 after bottom)
+#            |  |  └─── 2 after
+#            |  └────── 1 after
+#            └───────── bottom (not counted)
+#
+# B) includeBottomInCount = yes (bottom does count)
+# Bottom counts as #1 → you need 2 more greens → triggers on the 2nd green after.
+# ... R R R  G  G  G ...
+#            ^  ^  ^
+#            |  |  └─ scanner fires here (bottom=1, then +2)
+#            |  └─── +1 after
+#            └────── bottom (counts as #1)
+# ============================================================
+
+# ============================================================
+# README — Down‑streak / Bottom‑Reversal Scanner (RED bars)
+# ============================================================
+# What this does
+#   • Streak mode (reversalOn = no): flags symbols where the LAST N bars are
+#     ALL RED (contiguous), controlled by `consecutiveBars`.
+#   • Reversal mode (reversalOn = yes): detects a local BOTTOM (first GREEN bar
+#     after ≥ N RED bars) and then requires X GREEN bars of confirmation.
+#     – X is `reversalConfirmBars`
+#     – Whether the bottom (first green) counts toward X is set by
+#       `includeBottomInCount` (no = require X after bottom; yes = bottom counts as #1).
+#
+# Timeframe & session
+#   • This scanner uses the **Stock Hacker Aggregation** you select (5‑min, 15‑min, Day, …).
+#   • Intraday definition: set `usePrevClose = no` → red = Close < Open.
+#   • Daily‑style definition: set `usePrevClose = yes` → red = Close < Close[1].
+#   • Include/exclude **Extended Hours** from the Study filter’s gear menu (Scanner).
+#
+# Quick start (Stock Hacker)
+#   1) Open Scan → Stock Hacker, set **Aggregation** to 5m or 15m (intraday) or Day (daily).
+#   2) Add filter → Study → Edit → paste this file.
+#   3) In the study gear, set:
+#        – `consecutiveBars` (e.g., 3 for “ThreeDown”)
+#        – `usePrevClose` (no = intraday, yes = daily‑style)
+#        – `reversalOn` (no = streak, yes = bottom + X up bars)
+#   4) Choose your universe (e.g., S&P 500) and click **Scan**.
+#   5) Double‑click results to verify on a chart with the **same** aggregation.
+#
+# Inputs (most useful to tune)
+#   • minPrice (default 3.0): ignore very low‑priced symbols.
+#   • minAvgVol50 (default 300k): liquidity guard = average **per‑bar** volume over
+#     the last 50 bars on the chosen aggregation. On 5‑minute bars, 50 bars ≈ 4h10m.
+#     Note: early in the session there may be <50 bars; the average can under‑represent
+#     liquidity until enough bars accumulate.
+#   • consecutiveBars: N contiguous red bars required (streak mode).
+#   • usePrevClose: intraday vs daily‑style red/green definition (see above).
+#   • minBodyBP / useStrictDoji / minBodyFracOfRange: filter out tiny/doji bodies.
+#   • requireMinDrop / minDropPct: optional total % drop across the N‑bar window.
+#   • reversalOn / reversalConfirmBars / includeBottomInCount: reversal confirmation.
+#
+# Trigger timing
+#   • Signals evaluate on the most recent **COMPLETED** bar of the selected aggregation
+#     (scans do not ‘fire’ mid‑bar).
+#
+# Mapping to simple names (streak mode)
+#   • FirstRed   → consecutiveBars = 1
+#   • TwoDown    → consecutiveBars = 2
+#   • ThreeDown  → consecutiveBars = 3
+#
+# Visual reference (UP‑streak variant for intuition)
+#   (R = red/down bar, G = green/up bar)
+#   ... R R R R R R  G  G  G ...
+#                  ^  ^  ^
+#                  |  |  └─ triggers when set to ThreeUp
+#                  |  └──── triggers when set to TwoUp
+#                  └─────── triggers when set to FirstGreen
+#
+# A) includeBottomInCount = no (bottom doesn’t count)
+#   You need 3 greens after the bottom → triggers on the 3rd green after.
+#   ... R R R  G  G  G  G ...
+#              ^  ^  ^  ^
+#              |  |  |  └─ scanner fires here (3 after bottom)
+#              |  |  └─── 2 after
+#              |  └────── 1 after
+#              └───────── bottom (not counted)
+#
+# B) includeBottomInCount = yes (bottom does count)
+#   Bottom counts as #1 → you need 2 more greens → triggers on the 2nd green after.
+#   ... R R R  G  G  G ...
+#              ^  ^  ^
+#              |  |  └─ scanner fires here (bottom=1, then +2)
+#              |  └─── +1 after
+#              └────── bottom (counts as #1)
+#
+# Troubleshooting
+#   • No hits? Try relaxing filters: lower `minAvgVol50`, set `minBodyBP = 0`,
+#     disable `requireMinDrop`, or test `consecutiveBars = 2`.
+#   • Mismatch vs chart? Ensure chart aggregation/session matches the Scanner’s settings.
+#   • Remember: scans and columns both fire on **bar close** only.
+# ============================================================
+
+
+
 # Streak (many reds) OR Reversal (bottom + X up bars) — Daily or Intraday
 # Aggregation:
 #   - Daily:    set to Day, usePrevClose = yes  (red = Close < Close[1])
