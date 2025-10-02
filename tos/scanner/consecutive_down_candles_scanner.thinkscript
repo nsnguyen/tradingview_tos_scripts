@@ -1,0 +1,60 @@
+# Consecutive Down Candles Scanner — uses Scanner's aggregation (no secondary period)
+# Set the Stock Hacker "Aggregation" to 5 min or 15 min. This script will respect that.
+
+################
+# USER INPUTS  #
+################
+input consecutiveBars = 3;                       # Minimum consecutive down candles
+input minPrice = 3;                            # Minimum price filter
+input minAvgVol50 = 0;                      # 50-bar average volume (liquidity)
+
+# Body-size filter to avoid tiny doji bars
+input useBodyFilter = no;
+input minBodyBP = 10;                            # Minimum body size in basis points (0.01%)
+
+# Optional: require a minimum drop across the streak
+input requireMinDrop = no;
+input minDropPct = -3.0;                         # e.g., -3.0 means price down at least 3%
+
+# Optional: gate to ensure you're running at the intended period (does NOT change period)
+input enforceAggregation = {default UseScannerSetting, FiveMinOnly, FifteenMinOnly};
+
+def aggOK = if enforceAggregation == enforceAggregation.UseScannerSetting then yes
+            else if enforceAggregation == enforceAggregation.FiveMinOnly then GetAggregationPeriod() == AggregationPeriod.FIVE_MIN
+            else GetAggregationPeriod() == AggregationPeriod.FIFTEEN_MIN;
+
+################
+# CORE LOGIC   #
+################
+# Price / liquidity guards on the scanner's aggregation
+
+def hasHist = !IsNaN(close[consecutiveBars]);
+
+def liquid = Average(volume, 50) >= minAvgVol50;
+
+def priceOk = close >= minPrice and liquid and hasHist;
+
+# Body size filter
+
+def body = AbsValue(close - open);
+
+def bodyOK = if !useBodyFilter then yes else ((body / close) * 10000) >= minBodyBP;
+
+# Down candle (intraday)
+
+def downCandle = close < open and bodyOK;
+
+# Require the last N bars to all be down (consecutive ending on the current bar)
+
+def consecutiveDown = Sum(downCandle, consecutiveBars) == consecutiveBars;
+
+# Optional minimum total pct drop measured from N bars ago to now
+
+def dropPct = (close / close[consecutiveBars] - 1) * 100;
+
+def dropOK = if !requireMinDrop then yes else dropPct <= minDropPct;
+
+################
+# FINAL PLOT   #
+################
+plot scan = aggOK and priceOk and consecutiveDown and dropOK;

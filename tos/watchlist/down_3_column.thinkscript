@@ -1,0 +1,26 @@
+# Watchlist flag: N consecutive down bars (1 = match)
+input consecutiveBars = 3;
+input minPrice = 1.0;
+input minAvgVol50 = 0;
+input useBodyFilter = no;
+input minBodyBP = 10;
+input requireMinDrop = no;
+input minDropPct = -3.0;
+
+def hasHist  = !IsNaN(close[consecutiveBars]);
+def liquid   = Average(volume, 50) >= minAvgVol50;
+def priceOk  = close >= minPrice and liquid and hasHist;
+
+def body     = AbsValue(close - open);
+def bodyOK   = if !useBodyFilter then yes else ((body / close) * 10000) >= minBodyBP;
+
+def down     = close < open and bodyOK;
+def consecutiveDown = Sum(down, consecutiveBars) == consecutiveBars;
+
+def dropPct  = (close / close[consecutiveBars] - 1) * 100;
+def dropOK   = if !requireMinDrop then yes else dropPct <= minDropPct;
+
+plot Data = if priceOk and consecutiveDown and dropOK then 1 else 0;
+
+AssignBackgroundColor(if Data == 1 then Color.DARK_RED else Color.CURRENT);
+Data.AssignValueColor(if Data == 1 then Color.WHITE else Color.CURRENT);
