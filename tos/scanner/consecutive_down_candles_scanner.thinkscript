@@ -22,6 +22,17 @@ input minBodyBP = 10;                            # Minimum body size in basis po
 input requireMinDrop = no;
 input minDropPct = -3.0;                         # e.g., -3.0 means price down at least 3%
 
+# Bollinger Band oversold detection
+input useBollingerFilter = yes;
+input bbLength = 20;                             # Bollinger Band period
+input bbStdDev = 2.0;                            # Standard deviation multiplier
+input bbOversoldThreshold = 0.1;                 # How far below lower band (0.1 = 10% below)
+
+# RSI oversold detection
+input useRSIFilter = yes;
+input rsiLength = 14;                            # RSI period
+input rsiOversold = 30;                          # RSI oversold threshold
+
 # Optional: gate to ensure you're running at the intended period (does NOT change period)
 input enforceAggregation = {default UseScannerSetting, FiveMinOnly, FifteenMinOnly};
 
@@ -60,7 +71,29 @@ def dropPct = (close / close[consecutiveBars] - 1) * 100;
 
 def dropOK = if !requireMinDrop then yes else dropPct <= minDropPct;
 
+# Bollinger Band calculations
+
+def bbMiddle = Average(close, bbLength);
+def bbStdDevValue = StDev(close, bbLength);
+def bbUpper = bbMiddle + (bbStdDev * bbStdDevValue);
+def bbLower = bbMiddle - (bbStdDev * bbStdDevValue);
+
+# Check if candle BODY is below lower Bollinger Band (oversold)
+# For down candles: open is higher than close, so we check if open (top of body) is below BB
+# For up candles: close is higher than open, so we check if open (bottom of body) is below BB
+def bodyTop = Max(open, close);
+def bodyBottom = Min(open, close);
+
+# Body is outside BB if either top or bottom of body is below the lower band
+def bodyBelowBBLower = bodyBottom < bbLower;
+
+# Check if body is significantly below lower band (extreme oversold)
+def bodyExtremeOversold = bodyBottom < (bbLower * (1 - bbOversoldThreshold));
+
+# Bollinger Band filter - requires candle body to be outside lower band
+def bbOK = if !useBollingerFilter then yes else (bodyBelowBBLower or bodyExtremeOversold);
+
 ################
 # FINAL PLOT   #
 ################
-plot scan = aggOK and priceOk and consecutiveDown and dropOK;
+plot scan = aggOK and priceOk and consecutiveDown and dropOK and bbOK;
