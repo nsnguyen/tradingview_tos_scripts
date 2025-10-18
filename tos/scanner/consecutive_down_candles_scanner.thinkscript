@@ -30,7 +30,6 @@ input bbOversoldThreshold = 0.1;                 # How far below lower band (0.1
 
 # RSI oversold detection
 input useRSIFilter = yes;
-input rsiLength = 14;                            # RSI period
 input rsiOversold = 30;                          # RSI oversold threshold
 
 # Optional: gate to ensure you're running at the intended period (does NOT change period)
@@ -93,7 +92,13 @@ def bodyExtremeOversold = bodyBottom < (bbLower * (1 - bbOversoldThreshold));
 # Bollinger Band filter - requires candle body to be outside lower band
 def bbOK = if !useBollingerFilter then yes else (bodyBelowBBLower or bodyExtremeOversold);
 
+# RSI calculations (ThinkScript RSI requires constant length, using default 14)
+def rsiValue = reference RSI(length = 14);
+
+# RSI oversold filter - requires RSI to be below oversold threshold
+def rsiOK = if !useRSIFilter then yes else rsiValue <= rsiOversold;
+
 ################
 # FINAL PLOT   #
 ################
-plot scan = aggOK and priceOk and consecutiveDown and dropOK and bbOK;
+plot scan = aggOK and priceOk and consecutiveDown and dropOK and bbOK and rsiOK;
