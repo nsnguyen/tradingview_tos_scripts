@@ -30,7 +30,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 		{
 			if (State == State.SetDefaults)
 			{
-				Description									= @"Shades Asia, London, and NY sessions.";
+				Description									= @"Shades Asia, London, and NY sessions. Times are defined in CT and auto-adjust to your selected chart timezone.";
 				Name										= "MultiSessionShade";
 				Calculate									= Calculate.OnBarClose;
 				IsOverlay									= true;
@@ -38,6 +38,9 @@ namespace NinjaTrader.NinjaScript.Indicators
 				PaintPriceMarkers							= false;
 				ScaleJustification							= NinjaTrader.Gui.Chart.ScaleJustification.Right;
 				
+				// --- TIMEZONE SETTING ---
+				SelectedTimezone = "Pacific";
+
 				// --- ASIA Defaults (5pm - 2am CT) ---
 				ShowAsia = true;
 				AsiaStart = DateTime.Parse("17:00");
@@ -91,12 +94,14 @@ namespace NinjaTrader.NinjaScript.Indicators
 				BackBrush = brushNY;
 		}
 
-		// Helper function to check time ranges
+		// Helper function to check time ranges with timezone adjustment
 		private bool IsTimeInSession(DateTime start, DateTime end)
 		{
 			TimeSpan barTime = Time[0].TimeOfDay;
-			TimeSpan s = start.TimeOfDay;
-			TimeSpan e = end.TimeOfDay;
+			
+			// Apply timezone offset to convert CT times to chart timezone
+			TimeSpan s = AdjustTimeForTimezone(start.TimeOfDay);
+			TimeSpan e = AdjustTimeForTimezone(end.TimeOfDay);
 
 			if (s > e) // Overnight session (e.g. 17:00 to 02:00)
 				return barTime >= s || barTime < e;
@@ -104,7 +109,37 @@ namespace NinjaTrader.NinjaScript.Indicators
 				return barTime >= s && barTime < e;
 		}
 
+		// Adjusts time from CT to selected chart timezone
+		private TimeSpan AdjustTimeForTimezone(TimeSpan ctTime)
+		{
+			// Convert timezone string to hour offset from CT
+			int offset = 0;
+			switch (SelectedTimezone)
+			{
+				case "Eastern":  offset = 1;  break;
+				case "Central":  offset = 0;  break;
+				case "Mountain": offset = -1; break;
+				case "Pacific":  offset = -2; break;
+			}
+			
+			double totalHours = ctTime.TotalHours + offset;
+			
+			// Handle wrap-around for negative hours or hours >= 24
+			if (totalHours < 0)
+				totalHours += 24;
+			else if (totalHours >= 24)
+				totalHours -= 24;
+			
+			return TimeSpan.FromHours(totalHours);
+		}
+
 		#region Properties
+		// --- TIMEZONE SETTING ---
+		[NinjaScriptProperty]
+		[TypeConverter(typeof(TimezoneConverter))]
+		[Display(Name="Chart Timezone", Description="Select your chart's timezone. Session times are defined in CT and auto-adjust.", Order=0, GroupName="0. Timezone")]
+		public string SelectedTimezone { get; set; }
+
 		// --- ASIA SETTINGS ---
 		[NinjaScriptProperty]
 		[Display(Name="Show Asia", Order=1, GroupName="1. Asia Session")]
@@ -185,5 +220,17 @@ namespace NinjaTrader.NinjaScript.Indicators
 		[Display(Name="NY Opacity", Order=5, GroupName="3. NY Session")]
 		public int NYOpacity { get; set; }
 		#endregion
+	}
+
+	// TypeConverter to create dropdown for timezone selection
+	public class TimezoneConverter : TypeConverter
+	{
+		public override bool GetStandardValuesSupported(ITypeDescriptorContext context) => true;
+		public override bool GetStandardValuesExclusive(ITypeDescriptorContext context) => true;
+		
+		public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext context)
+		{
+			return new StandardValuesCollection(new string[] { "Pacific", "Mountain", "Central", "Eastern" });
+		}
 	}
 }
