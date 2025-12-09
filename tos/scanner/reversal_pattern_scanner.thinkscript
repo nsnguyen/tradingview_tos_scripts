@@ -1,0 +1,107 @@
+# ============================================================
+# README 
+# ============================================================
+
+# Reversal Pattern Scanner — Detects large red candle followed by consolidation and upward curl
+# Set the Stock Hacker "Aggregation" to 5 min. This script will respect that.
+
+################
+# USER INPUTS  #
+################
+input minPrice = 3;                            # Minimum price filter
+input minAvgVol50 = 0;                         # 50-bar average volume (liquidity)
+
+# Large red candle criteria
+input largeRedBodyPct = 2.0;                   # Minimum body size as % of price
+input largeRedVolMultiplier = 1.5;             # Volume multiplier vs 20-period average
+input maxLowerWickPct = 0.5;                   # Maximum lower wick as % of price
+
+# Consolidation criteria
+input maxConsolidationBodyPct = 0.8;            # Maximum body size during consolidation
+input consolidationVolMultiplier = 0.8;        # Volume multiplier during consolidation
+
+# Upward curl criteria
+input curlBodyPct = 0.8;                       # Minimum body size for curl
+input curlVolMultiplier = 1.2;                 # Volume multiplier for curl
+input curlBreakPct = 0.3;                      # How far above consolidation high
+
+# RSI oversold recovery
+input useRSIFilter = yes;
+input rsiOversold = 30;                        # RSI oversold threshold
+input rsiRecovery = 35;                        # RSI recovery threshold
+
+# Lookback period for pattern detection
+input maxLookbackBars = 20;                    # Maximum bars to look back for pattern
+
+# Optional: gate to ensure you're running at the intended period
+input enforceAggregation = {default UseScannerSetting, FiveMinOnly};
+
+def aggOK = if enforceAggregation == enforceAggregation.UseScannerSetting then yes
+            else GetAggregationPeriod() == AggregationPeriod.FIVE_MIN;
+
+################
+# CORE LOGIC   #
+################
+# Price / liquidity guards
+def hasHist = !IsNaN(close[maxLookbackBars]);
+def liquid = Average(volume, 50) >= minAvgVol50;
+def priceOk = close >= minPrice and liquid and hasHist;
+
+# Volume calculations
+def avgVol20 = Average(volume, 20);
+
+# Body size calculations
+def bodySize = AbsValue(close - open);
+def bodySizePct = (bodySize / close) * 100;
+
+# Lower wick calculations
+def lowerWick = Min(open, close) - low;
+def lowerWickPct = (lowerWick / close) * 100;
+
+# Large red candle detection
+def largeRedCandle = close < open and                           # Red candle
+                     bodySizePct >= largeRedBodyPct and         # Large body
+                     volume >= (avgVol20 * largeRedVolMultiplier) and  # High volume
+                     lowerWickPct <= maxLowerWickPct;           # Minimal lower wick
+
+# Consolidation detection (small bodies, contained range)
+def smallBody = bodySizePct <= maxConsolidationBodyPct;
+def lowVolume = volume <= (avgVol20 * consolidationVolMultiplier);
+
+# Upward curl detection
+def upwardCurl = close > open and                               # Green candle
+                 bodySizePct >= curlBodyPct and                 # Minimum body size
+                 volume >= (avgVol20 * curlVolMultiplier) and   # Rising volume
+                 close > close[1];                              # Body above prior
+
+# RSI calculations
+def rsiValue = reference RSI(length = 14);
+def rsiOversoldCondition = rsiValue <= rsiOversold;
+def rsiRecoveryCondition = rsiValue >= rsiRecovery;
+
+# Pattern detection logic - simplified approach
+# Look for large red candle 3-5 bars ago, then check for recent upward curl
+
+# Large red candle 3-5 bars ago
+def largeRed3 = largeRedCandle[3];
+def largeRed4 = largeRedCandle[4];
+def largeRed5 = largeRedCandle[5];
+def hadLargeRed = largeRed3 or largeRed4 or largeRed5;
+
+# Recent upward curl (current or 1 bar ago)
+def recentCurl = upwardCurl or upwardCurl[1];
+
+# RSI conditions
+def rsiWasOversold = rsiOversoldCondition[3] or rsiOversoldCondition[4] or rsiOversoldCondition[5];
+def rsiRecovering = rsiRecoveryCondition or rsiRecoveryCondition[1];
+
+# RSI filter
+def rsiOK = if !useRSIFilter then yes else (rsiWasOversold and rsiRecovering);
+
+# Pattern found
+def patternFound = hadLargeRed and recentCurl and rsiOK;
+
+################
+# FINAL PLOT   #
+################
+plot scan = aggOK and priceOk and patternFound;
