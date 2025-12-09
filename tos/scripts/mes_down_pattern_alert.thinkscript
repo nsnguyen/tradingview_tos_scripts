@@ -1,0 +1,144 @@
+# ============================================================
+# MES Down Pattern Alert — 5 Consecutive Down Candles
+# ============================================================
+# Purpose: Alert when 5 consecutive down candles complete on MES
+#          to prepare for potential reversal opportunities.
+#
+# Best used on: 15-minute chart (or any intraday timeframe)
+# Symbol: /MES (Micro E-mini S&P 500 Futures)
+#
+# How it works:
+#   1. Detects 5 consecutive "down" candles (Close < Previous Close)
+#   2. Each candle must show progressive selling (stair-stepping down)
+#   3. Filters out doji/tiny candles (body must be ≥ 30% of bar range)
+#   4. Fires alert immediately when the 5th candle closes
+#
+# Setup in TOS:
+#   1. Open a /MES chart set to 15-minute aggregation
+#   2. Studies → Edit Studies → Add this study
+#   3. Right-click the study → Create Alert → Set to trigger on "DownPatternAlert"
+#   4. Configure alert sound, popup, email as desired
+# ============================================================
+
+################
+# USER INPUTS  #
+################
+
+# Core Pattern Settings
+input consecutiveBars = 5;              # Number of consecutive down candles required
+input requireStairStep = yes;           # Each close must be lower than previous close
+
+# Body Size Filter (to exclude doji/tiny candles)
+input minBodyPctOfRange = 30;           # Body must be at least X% of bar's high-low range
+input minBodyTicks = 2;                 # Minimum body size in ticks (0.25 pts each for MES)
+
+# Alert Settings
+input showArrows = yes;                 # Show arrow markers on chart
+input showLabels = yes;                 # Show text labels with pattern info
+input enableAlerts = yes;               # Enable TOS alert condition
+
+################
+# COLORS       #
+################
+
+DefineGlobalColor("ArrowColor", Color.CYAN);
+DefineGlobalColor("LabelColor", Color.YELLOW);
+DefineGlobalColor("AlertHighlight", Color.DARK_RED);
+
+################
+# CALCULATIONS #
+################
+
+# Down candle definition: Close < Previous Close
+def downCandle = close < close[1];
+
+# Body size calculations
+def bodySize = AbsValue(close - open);
+def barRange = high - low;
+def bodyPctOfRange = if barRange > 0 then (bodySize / barRange) * 100 else 0;
+
+# Tick size for MES is 0.25 points
+def tickSize = 0.25;
+def bodyTicks = bodySize / tickSize;
+
+# Full candle filter: not a doji/tiny bar
+def fullCandle = bodyPctOfRange >= minBodyPctOfRange and bodyTicks >= minBodyTicks;
+
+# Valid down candle = down + full body
+def validDownCandle = downCandle and fullCandle;
+
+# Stair-step check: each close is lower than the one before
+def stairStep1 = close < close[1];
+def stairStep2 = close[1] < close[2];
+def stairStep3 = close[2] < close[3];
+def stairStep4 = close[3] < close[4];
+def stairStep5 = close[4] < close[5];
+
+def allStairStep = stairStep1 and stairStep2 and stairStep3 and stairStep4;
+
+# Count consecutive valid down candles ending at current bar
+def consecutiveDown = Sum(validDownCandle, consecutiveBars) == consecutiveBars;
+
+# Final pattern detection
+def patternDetected = consecutiveDown and (if requireStairStep then allStairStep else yes);
+
+# Calculate total drop over the pattern
+def totalDrop = close[consecutiveBars - 1] - close;
+def totalDropPct = (totalDrop / close[consecutiveBars - 1]) * 100;
+
+################
+# VISUALS      #
+################
+
+# Arrow marker below the 5th candle
+plot DownPatternArrow = if showArrows and patternDetected then low - (barRange * 0.5) else Double.NaN;
+DownPatternArrow.SetPaintingStrategy(PaintingStrategy.ARROW_UP);
+DownPatternArrow.SetDefaultColor(GlobalColor("ArrowColor"));
+DownPatternArrow.SetLineWeight(3);
+
+# Label showing pattern info
+AddChartBubble(
+    showLabels and patternDetected,
+    low - (barRange * 0.8),
+    "5 DOWN\n" + AsText(totalDrop, NumberFormat.TWO_DECIMAL_PLACES) + " pts\n(" + 
+    AsText(totalDropPct, NumberFormat.TWO_DECIMAL_PLACES) + "%)",
+    GlobalColor("LabelColor"),
+    no
+);
+
+# Background highlight on pattern bars (subtle)
+AssignBackgroundColor(if patternDetected then GlobalColor("AlertHighlight") else Color.CURRENT);
+
+################
+# ALERTS       #
+################
+
+# Main alert condition - fires when pattern is detected
+Alert(enableAlerts and patternDetected, 
+      "MES: 5 Down Candles Detected! Drop: " + AsText(totalDrop, NumberFormat.TWO_DECIMAL_PLACES) + " pts", 
+      Alert.BAR, 
+      Sound.Ding);
+
+# Plot for creating manual alerts in TOS
+plot DownPatternAlert = patternDetected;
+DownPatternAlert.SetPaintingStrategy(PaintingStrategy.BOOLEAN_POINTS);
+DownPatternAlert.SetDefaultColor(Color.RED);
+DownPatternAlert.SetLineWeight(5);
+DownPatternAlert.Hide();
+
+################
+# WATCHLIST    #
+################
+
+# For use in watchlist columns - shows "YES" when pattern active
+AddLabel(yes, if patternDetected then "5 DOWN ALERT!" else "", 
+         if patternDetected then Color.RED else Color.GRAY);
+
+################
+# DEBUG INFO   #
+################
+
+# Uncomment these for troubleshooting:
+# AddLabel(yes, "ConsecDown: " + consecutiveDown, Color.WHITE);
+# AddLabel(yes, "StairStep: " + allStairStep, Color.WHITE);
+# AddLabel(yes, "BodyPct: " + AsText(bodyPctOfRange, NumberFormat.TWO_DECIMAL_PLACES) + "%", Color.WHITE);
