@@ -106,21 +106,11 @@ AddChartBubble(
     no
 );
 
-# Background highlight on pattern bars (subtle)
-AssignBackgroundColor(if patternDetected then GlobalColor("AlertHighlight") else Color.CURRENT);
+# Background highlight on pattern bars (disabled - uncomment to enable)
+# AssignBackgroundColor(if patternDetected then GlobalColor("AlertHighlight") else Color.CURRENT);
 
 ################
-# ALERTS       #
-################
-
-# Main alert condition - fires when pattern is detected
-Alert(enableAlerts and patternDetected, 
-      "MES: 5 Down Candles Detected! Drop: " + AsText(totalDrop, NumberFormat.TWO_DECIMAL_PLACES) + " pts", 
-      Alert.BAR, 
-      Sound.Ding);
-
-# Plot for creating manual alerts in TOS
-plot DownPatternAlert = patternDetected;
+# ALERTS       plot DownPatternAlert = patternDetected;
 DownPatternAlert.SetPaintingStrategy(PaintingStrategy.BOOLEAN_POINTS);
 DownPatternAlert.SetDefaultColor(Color.RED);
 DownPatternAlert.SetLineWeight(5);
