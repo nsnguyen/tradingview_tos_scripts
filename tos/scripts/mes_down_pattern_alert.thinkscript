@@ -90,9 +90,9 @@ def totalDropPct = (totalDrop / close[consecutiveBars - 1]) * 100;
 # VISUALS      #
 ################
 
-# Arrow marker below the 5th candle
-plot DownPatternArrow = if showArrows and patternDetected then low - (barRange * 0.5) else Double.NaN;
-DownPatternArrow.SetPaintingStrategy(PaintingStrategy.ARROW_UP);
+# Arrow marker above the candle pointing DOWN
+plot DownPatternArrow = if showArrows and patternDetected then high + (barRange * 0.5) else Double.NaN;
+DownPatternArrow.SetPaintingStrategy(PaintingStrategy.ARROW_DOWN);
 DownPatternArrow.SetDefaultColor(GlobalColor("ArrowColor"));
 DownPatternArrow.SetLineWeight(3);
 
@@ -110,7 +110,17 @@ AddChartBubble(
 # AssignBackgroundColor(if patternDetected then GlobalColor("AlertHighlight") else Color.CURRENT);
 
 ################
-# ALERTS       plot DownPatternAlert = patternDetected;
+# ALERTS       #
+################
+
+# Main alert condition - fires when pattern is detected
+Alert(enableAlerts and patternDetected, 
+      "MES: 5 Down Candles Detected! Drop: " + AsText(totalDrop, NumberFormat.TWO_DECIMAL_PLACES) + " pts", 
+      Alert.BAR, 
+      Sound.Ding);
+
+# Plot for creating manual alerts in TOS
+plot DownPatternAlert = patternDetected;
 DownPatternAlert.SetPaintingStrategy(PaintingStrategy.BOOLEAN_POINTS);
 DownPatternAlert.SetDefaultColor(Color.RED);
 DownPatternAlert.SetLineWeight(5);
