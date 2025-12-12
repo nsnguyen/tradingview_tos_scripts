@@ -1,0 +1,153 @@
+# ============================================================
+# MES Up Pattern Alert — 5 Consecutive Up Candles
+# ============================================================
+# Purpose: Alert when 5 consecutive up candles complete on MES
+#          to prepare for potential reversal opportunities (short setup).
+#
+# Best used on: 15-minute chart (or any intraday timeframe)
+# Symbol: /MES (Micro E-mini S&P 500 Futures) — works on any symbol
+#
+# How it works:
+#   1. Detects 5 consecutive "up" candles (Close > Previous Close)
+#   2. Each candle must show progressive buying (stair-stepping up)
+#   3. Filters out doji/tiny candles (body must be ≥ 30% of bar range)
+#   4. Fires alert immediately when the 5th candle closes
+#
+# Setup in TOS:
+#   1. Open a /MES chart set to 15-minute aggregation
+#   2. Studies → Edit Studies → Add this study
+#   3. Right-click the study → Create Alert → Set to trigger on "UpPatternAlert"
+#   4. Configure alert sound, popup, email as desired
+# ============================================================
+
+################
+# USER INPUTS  #
+################
+
+# Core Pattern Settings
+input consecutiveBars = 5;              # Number of consecutive up candles required
+input requireStairStep = yes;           # Each close must be higher than previous close
+
+# Body Size Filter (to exclude doji/tiny candles)
+input minBodyPctOfRange = 30;           # Body must be at least X% of bar's high-low range
+input minBodyTicks = 2;                 # Minimum body size in ticks (0.25 pts each for MES)
+
+# Alert Settings
+input showArrows = yes;                 # Show arrow markers on chart
+input showLabels = yes;                 # Show text labels with pattern info
+input enableAlerts = yes;               # Enable TOS alert condition
+
+################
+# COLORS       #
+################
+
+DefineGlobalColor("ArrowColor", Color.MAGENTA);
+DefineGlobalColor("LabelColor", Color.YELLOW);
+DefineGlobalColor("AlertHighlight", Color.DARK_GREEN);
+
+################
+# CALCULATIONS #
+################
+
+# Up candle definition: Close > Previous Close
+def upCandle = close > close[1];
+
+# Body size calculations
+def bodySize = AbsValue(close - open);
+def barRange = high - low;
+def bodyPctOfRange = if barRange > 0 then (bodySize / barRange) * 100 else 0;
+
+# Tick size for MES is 0.25 points
+def tickSize = 0.25;
+def bodyTicks = bodySize / tickSize;
+
+# Full candle filter: not a doji/tiny bar
+def fullCandle = bodyPctOfRange >= minBodyPctOfRange and bodyTicks >= minBodyTicks;
+
+# Valid up candle = up + full body
+def validUpCandle = upCandle and fullCandle;
+
+# Stair-step check: each close is higher than the one before
+def stairStep1 = close > close[1];
+def stairStep2 = close[1] > close[2];
+def stairStep3 = close[2] > close[3];
+def stairStep4 = close[3] > close[4];
+def stairStep5 = close[4] > close[5];
+
+def allStairStep = stairStep1 and stairStep2 and stairStep3 and stairStep4;
+
+# Count consecutive valid up candles ending at current bar
+def consecutiveUp = Sum(validUpCandle, consecutiveBars) == consecutiveBars;
+
+# Final pattern detection
+def patternDetected = consecutiveUp and (if requireStairStep then allStairStep else yes);
+
+# Check if pattern was true on previous bar
+def prevStairStep = stairStep2 and stairStep3 and stairStep4 and stairStep5;
+def prevConsecutiveUp = Sum(validUpCandle[1], consecutiveBars) == consecutiveBars;
+def prevPatternDetected = prevConsecutiveUp and (if requireStairStep then prevStairStep else yes);
+
+# Only trigger on FIRST occurrence (when pattern goes from false to true)
+def firstOccurrence = patternDetected and !prevPatternDetected;
+
+# Calculate total gain over the pattern
+def totalGain = close - close[consecutiveBars - 1];
+def totalGainPct = (totalGain / close[consecutiveBars - 1]) * 100;
+
+################
+# VISUALS      #
+################
+
+# Arrow marker below the candle pointing UP - on every bar of the pattern
+plot UpPatternArrow = if showArrows and patternDetected then low - (barRange * 0.5) else Double.NaN;
+UpPatternArrow.SetPaintingStrategy(PaintingStrategy.ARROW_UP);
+UpPatternArrow.SetDefaultColor(GlobalColor("ArrowColor"));
+UpPatternArrow.SetLineWeight(3);
+
+# Label showing pattern info - only on first occurrence (to avoid clutter)
+AddChartBubble(
+    showLabels and firstOccurrence,
+    low - (barRange * 0.8),
+    "5 UP\n+" + AsText(totalGain, NumberFormat.TWO_DECIMAL_PLACES) + " pts\n(+" + 
+    AsText(totalGainPct, NumberFormat.TWO_DECIMAL_PLACES) + "%)",
+    GlobalColor("LabelColor"),
+    no
+);
+
+# Background highlight on pattern bars (disabled - uncomment to enable)
+# AssignBackgroundColor(if patternDetected then GlobalColor("AlertHighlight") else Color.CURRENT);
+
+################
+# ALERTS       #
+################
+
+# Main alert condition - fires ONCE when pattern first detected
+Alert(enableAlerts and firstOccurrence, 
+      "MES: 5 Up Candles Detected! Gain: " + AsText(totalGain, NumberFormat.TWO_DECIMAL_PLACES) + " pts", 
+      Alert.BAR, 
+      Sound.Ding);
+
+# Plot for creating manual alerts in TOS - triggers on FIRST occurrence only
+plot UpPatternAlert = firstOccurrence;
+UpPatternAlert.SetPaintingStrategy(PaintingStrategy.BOOLEAN_POINTS);
+UpPatternAlert.SetDefaultColor(Color.GREEN);
+UpPatternAlert.SetLineWeight(5);
+UpPatternAlert.Hide();
+
+################
+# WATCHLIST    #
+################
+
+# For use in watchlist columns - shows "YES" when pattern active
+AddLabel(yes, if firstOccurrence then "5 UP ALERT!" else "", 
+         if firstOccurrence then Color.GREEN else Color.GRAY);
+
+################
+# DEBUG INFO   #
+################
+
+# Uncomment these for troubleshooting:
+# AddLabel(yes, "ConsecUp: " + consecutiveUp, Color.WHITE);
+# AddLabel(yes, "StairStep: " + allStairStep, Color.WHITE);
+# AddLabel(yes, "BodyPct: " + AsText(bodyPctOfRange, NumberFormat.TWO_DECIMAL_PLACES) + "%", Color.WHITE);
+
